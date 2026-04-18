@@ -13,7 +13,12 @@ router.get('/', async (req, res) => {
 
 // GET /api/gallery/all (admin)
 router.get('/all', requireAuth, async (req, res) => {
-  const { data, error } = await supabase.from('gallery_images').select('*').order('created_at', { ascending: false });
+  const { data, error } = await supabase
+    .from('gallery_images')
+    .select('*')
+    .order('sort_order', { ascending: true })
+    .order('created_at', { ascending: false });
+
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -28,6 +33,34 @@ router.post('/', requireAuth, async (req, res) => {
     .select().single();
   if (error) return res.status(500).json({ error: error.message });
   res.status(201).json(data);
+});
+
+// PUT /api/gallery/reorder (admin)
+router.put('/reorder', requireAuth, async (req, res) => {
+  try {
+    const { items } = req.body;
+
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: 'items array is required' });
+    }
+
+    for (const item of items) {
+      const { id, sort_order } = item;
+
+      const { error } = await supabase
+        .from('gallery_images')
+        .update({ sort_order })
+        .eq('id', id);
+
+      if (error) {
+        return res.status(500).json({ error: error.message });
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // PUT /api/gallery/:id (admin)
@@ -46,7 +79,7 @@ router.put('/:id', requireAuth, async (req, res) => {
 router.delete('/:id', requireAuth, async (req, res) => {
   const { data: img } = await supabase.from('gallery_images').select('public_id').eq('id', req.params.id).single();
   if (img?.public_id) {
-    await cloudinary.uploader.destroy(img.public_id).catch(() => {});
+    await cloudinary.uploader.destroy(img.public_id).catch(() => { });
   }
   const { error } = await supabase.from('gallery_images').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ error: error.message });
